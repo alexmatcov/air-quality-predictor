@@ -1,0 +1,51 @@
+{
+    "A58969": {
+        "id": "A58969",
+        "country": "Sweden",
+        "city": "Everöd",
+        "latitude": "55.898",
+        "longitude": "14.094"
+    },
+    "A149242": {
+        "id": "A149242",
+        "country": "Sweden",
+        "city": "Ludvigsborg",
+        "latitude": "55.902",
+        "longitude": "13.606"
+    },
+    "A59656": {
+        "id": "A59656",
+        "country": "Sweden",
+        "city": "Eslöv",
+        "latitude": "55.852",
+        "longitude": "13.352"
+    },
+    "A61045": {
+        "id": "A61045",
+        "country": "Sweden",
+        "city": "Laröd",
+        "latitude": "56.096",
+        "longitude": "12.664"
+    },
+    "A62566": {
+        "id": "A62566",
+        "country": "Sweden",
+        "city": "Asmundtorp",
+        "latitude": "55.88609809242",
+        "longitude": "12.94568181038"
+    },
+    "A82942": {
+        "id": "A82942",
+        "country": "Sweden",
+        "city": "Dösjebro",
+        "latitude": "55.82",
+        "longitude": "13.03"
+    },
+    "A407335": {
+        "id": "A407335",
+        "country": "Sweden",
+        "city": "Skillinge",
+        "latitude": "55.476",
+        "longitude": "14.282"
+    }
+}
