@@ -19,8 +19,6 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# load_dotenv()
-
 # %%
 def load_locations(filepath: str = "locations.json") -> dict:
     """Load location data from JSON file."""
