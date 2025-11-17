@@ -1,6 +1,8 @@
 import openmeteo_requests
 import pandas as pd
 import requests_cache
+import requests
+from datetime import date
 from retry_requests import retry
 
 OPENMETEO_DAILY_VARIABLES = [
@@ -96,3 +98,56 @@ def get_historical_in_daterange(
     responses = client.weather_api(url, params=params)
 
     return _process_weather_responses(responses, places, OPENMETEO_DAILY_VARIABLES)
+
+def trigger_request(url: str) -> dict:
+    """Make API request with error handling."""
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+    return response.json()
+
+def get_pm25(location_id: str, location: dict, measurement_date: date, api_key: str) -> pd.DataFrame:
+    """
+    Fetch PM2.5 air quality data from AQICN API.
+    
+    Args:
+        location_id: AQICN station identifier (e.g., 'A58969')
+        location: Dictionary containing location metadata
+        measurement_date: Date of measurement
+        api_key: AQICN API key
+        
+    Returns:
+        DataFrame with columns: id, date, pm25
+    """
+    # Try station ID first
+    url = f"https://api.waqi.info/feed/@{location_id}/?token={api_key}"
+    data = trigger_request(url)
+    
+    # Fallback to city-based lookup if station unknown
+    if data.get('data') == "Unknown station":
+        city = location.get('city', '')
+        country = location.get('country', '')
+        url = f"https://api.waqi.info/feed/{country}/{city}/?token={api_key}"
+        data = trigger_request(url)
+    
+    # Check if the API response is valid
+    if data.get('status') != 'ok':
+        error_msg = f"API error for {location_id}: {data.get('data')}"
+        print(f"✗ {error_msg}")
+        raise requests.exceptions.RequestException(error_msg)
+    
+    # Extract air quality data
+    aqi_data = data['data']
+    pm25_value = aqi_data.get('iaqi', {}).get('pm25', {}).get('v', None)
+    
+    if pm25_value is None:
+        raise ValueError(f"No PM2.5 data available for {location_id}")
+    
+    df = pd.DataFrame([{
+        'id': location_id,
+        'date': measurement_date,
+        'pm25': float(pm25_value)
+    }])
+    
+    df['pm25'] = df['pm25'].astype('float32')
+    
+    return df
