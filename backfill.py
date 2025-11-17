@@ -5,7 +5,6 @@ from pathlib import Path
 import hopsworks
 import pandas as pd
 from pydantic_settings import BaseSettings
-
 import util
 
 # %%
@@ -20,6 +19,8 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# load_dotenv()
+
 # %%
 def load_locations(filepath: str = "locations.json") -> dict:
     """Load location data from JSON file."""
@@ -30,7 +31,7 @@ def load_locations(filepath: str = "locations.json") -> dict:
 locations = load_locations()
 
 # %%
-def process_air_quality(df: pd.DataFrame, place: dict) -> None:
+def process_air_quality(df: pd.DataFrame, location: dict) -> None:
     """
     Process air quality dataframe in place.
 
@@ -41,33 +42,33 @@ def process_air_quality(df: pd.DataFrame, place: dict) -> None:
     df["pm25"] = df["pm25"].astype("float32")
     df.drop(df.columns.difference(["date", "pm25"]), axis=1, inplace=True)
     df.dropna(inplace=True)
-    df["id"] = place["id"]
+    df["id"] = location["id"]
 
-
+# %%
 def load_air_quality_data(locations: dict) -> pd.DataFrame:
     """Load and process air quality data for all locations."""
     dfs = []
 
-    for place_id in locations:
-        file_path = Path(f"data/air-quality/{place_id}.csv")
+    for location_id in locations:
+        file_path = Path(f"data/{location_id}.csv")
         if not file_path.is_file():
             raise FileNotFoundError(f"File {file_path} not found")
 
-        print(f"Processing {place_id}")
+        print(f"Processing {location_id}")
         df = pd.read_csv(
             file_path, comment="#", skipinitialspace=True, parse_dates=["date"]
         )
-        process_air_quality(df, locations[place_id])
+        process_air_quality(df, locations[location_id])
         dfs.append(df)
 
     return pd.concat(dfs, ignore_index=True)
 
 
 air_quality_df = load_air_quality_data(locations)
-air_quality_df.head()
+air_quality_df.info()
 
 # %%
-project = hopsworks.login()
+project = hopsworks.login(engine="python", project="matcov")
 fs = project.get_feature_store()
 
 # %%
@@ -78,16 +79,18 @@ air_quality_fg = fs.get_or_create_feature_group(
     primary_key=["id"],
     event_time="date",
 )
+air_quality_fg
+air_quality_df
+# %%
 air_quality_fg.insert(air_quality_df)
+
+# %%
 air_quality_fg.update_feature_description("date", "Date of measurement of air quality")
-air_quality_fg.update_feature_description(
-    "pm25",
-    "Particles less than 2.5 micrometers in diameter (fine particles) pose health risk",
-)
+air_quality_fg.update_feature_description("pm25", "Particles less than 2.5 micrometers in diameter (fine particles) pose health risk")
 
 # %%
 weather_df = util.get_historical(air_quality_df, locations)
-weather_df.head()
+weather_df.info()
 
 # %%
 weather_fg = fs.get_or_create_feature_group(
@@ -98,5 +101,5 @@ weather_fg = fs.get_or_create_feature_group(
     event_time="date",
 )
 weather_fg.insert(weather_df, wait=True)
-
 # %%
+

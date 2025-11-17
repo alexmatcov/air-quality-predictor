@@ -4,17 +4,10 @@ import requests_cache
 from retry_requests import retry
 
 OPENMETEO_DAILY_VARIABLES = [
-    "temperature_2m_max",
-    "temperature_2m_min",
     "temperature_2m_mean",
-    "apparent_temperature_max",
-    "apparent_temperature_min",
-    "apparent_temperature_mean",
     "precipitation_sum",
-    "rain_sum",
     "wind_speed_10m_max",
-    "wind_direction_10m_dominant",
-    "weather_code"
+    "wind_direction_10m_dominant"
 ]
 
 
@@ -88,16 +81,7 @@ def get_historical(aq_df: pd.DataFrame, places: dict[str, dict]) -> pd.DataFrame
 def get_historical_in_daterange(
     starts: list[str], ends: list[str], places: dict[str, dict]
 ) -> pd.DataFrame:
-    """Fetch historical weather data for specified date ranges.
-
-    Args:
-        starts: Start dates for each location (in dict key order, format: YYYY-MM-DD)
-        ends: End dates for each location (in dict key order, format: YYYY-MM-DD)
-        places: Mapping of place IDs to location data (latitude, longitude)
-
-    Returns:
-        DataFrame with columns [id, date, ...weather_variables]
-    """
+    """Fetch historical weather data for specified date ranges."""
     client = _create_openmeteo_client(cache_expiry=-1)
 
     params = {

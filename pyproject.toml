@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "geopy>=2.4.1",
-    "hopsworks[python]>=4.4.2",
+    "hopsworks[python]==4.2.2",
     "ipykernel>=7.1.0",
     "matplotlib>=3.10.7",
     "openmeteo-requests>=1.7.4",
