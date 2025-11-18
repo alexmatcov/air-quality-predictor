@@ -40,11 +40,11 @@ project = hopsworks.login(api_key_value=settings.hopsworks_api_key)
 fs = project.get_feature_store()
 
 # %%
-air_quality_fg = fs.get_feature_group(name="air_quality", version=3)
+air_quality_fg = fs.get_feature_group(name="air_quality", version=5)
 weather_fg = fs.get_feature_group(name="weather", version=3)
 
 # %%
-selected_features = air_quality_fg.select(["id", "pm25", "date", "pm25_lag_1", "pm25_lag_2", "pm25_lag_3", "pm25_roll_3"]).join(
+selected_features = air_quality_fg.select(["id", "pm25", "date", "pm25_lag_1", "pm25_lag_2", "pm25_lag_3", "pm25_roll_3", "day_of_week", "is_weekend", "latitude", "longitude"]).join(
     weather_fg.select_all(), on="id"
 )
 
@@ -52,7 +52,7 @@ selected_features = air_quality_fg.select(["id", "pm25", "date", "pm25_lag_1", "
 feature_view = fs.get_or_create_feature_view(
     name="air_quality_fv",
     description="Weather features with air quality as the target",
-    version=3,
+    version=5,
     labels=["pm25"],
     query=selected_features,
 )

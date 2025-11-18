@@ -78,6 +78,19 @@ air_quality_df["pm25_roll_3"] = (
     .reset_index(level=0, drop=True)
 )
 
+
+air_quality_df["date"] = pd.to_datetime(air_quality_df["date"])
+
+air_quality_df["day_of_week"] = air_quality_df["date"].dt.weekday
+air_quality_df["is_weekend"] = (air_quality_df["day_of_week"] >= 5).astype(int)
+
+air_quality_df["latitude"] = air_quality_df["id"].map(
+    lambda x: float(locations[x]["latitude"])
+)
+air_quality_df["longitude"] = air_quality_df["id"].map(
+    lambda x: float(locations[x]["longitude"])
+)
+
 air_quality_df.info()
 
 # %%
@@ -88,7 +101,7 @@ fs = project.get_feature_store()
 air_quality_fg = fs.get_or_create_feature_group(
     name="air_quality",
     description="Air Quality characteristics of each day",
-    version=3,
+    version=5,
     primary_key=["id"],
     event_time="date",
 )
