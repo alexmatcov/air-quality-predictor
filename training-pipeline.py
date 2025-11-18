@@ -10,6 +10,9 @@ from pydantic_settings import BaseSettings
 from sklearn.metrics import mean_squared_error, r2_score
 from xgboost import XGBRegressor, plot_importance
 
+import optuna
+
+
 # %%
 class Settings(BaseSettings):
     """Application settings loaded from .env file."""
@@ -88,15 +91,42 @@ y_test = test_df[["pm25"]]
 print(f"After dropping NaNs - Training: {len(X_train_features)}, Test: {len(X_test_features)}")
 print(f"Features used: {list(X_train_features.columns)}")
 # %%
-xgb_regressor = XGBRegressor(
-    max_depth=5,
-    learning_rate=0.1,
-    n_estimators=100,
-    random_state=42
-)
+def objective(trial):
+    params = {
+        "max_depth": trial.suggest_int("max_depth", 3, 10),
+        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+        "n_estimators": trial.suggest_int("n_estimators", 50, 400),
+        "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+        "min_child_weight": trial.suggest_float("min_child_weight", 1.0, 10.0),
+        "gamma": trial.suggest_float("gamma", 0.0, 5.0),
+        "random_state": 42,
+        "tree_method": "hist",
+        "n_jobs": -1,
+    }
 
-xgb_regressor.fit(X_train_features, y_train)
-print("✓ Model training completed")
+    model = XGBRegressor(**params)
+    model.fit(X_train_features, y_train.iloc[:, 0])
+
+    preds = model.predict(X_test_features)
+    mse = mean_squared_error(y_test.iloc[:, 0], preds)
+    return mse
+
+study = optuna.create_study(direction="minimize")
+study.optimize(objective, n_trials=30)
+
+print("Best trial:")
+print(f"  Value (MSE): {study.best_value:.4f}")
+print(f"  Params: {study.best_params}")
+
+best_params = study.best_params
+best_params["random_state"] = 42
+best_params["tree_method"] = "hist"
+best_params["n_jobs"] = -1
+
+xgb_regressor = XGBRegressor(**best_params)
+xgb_regressor.fit(X_train_features, y_train.iloc[:, 0])
+print("✓ Model training completed with tuned hyperparameters")
 
 # %%
 y_pred = xgb_regressor.predict(X_test_features)
