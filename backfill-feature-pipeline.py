@@ -4,7 +4,7 @@ from pathlib import Path
 
 import hopsworks
 import pandas as pd
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import util
 
 # %%
@@ -13,8 +13,7 @@ class Settings(BaseSettings):
     hopsworks_api_key: str
     aqicn_api_key: str
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 settings = Settings()
@@ -43,6 +42,27 @@ def process_air_quality(df: pd.DataFrame, location: dict) -> None:
     df["id"] = location["id"]
 
 # %%
+def add_lagged_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add lagged PM2.5 features for 1, 2, and 3 days."""
+    df = df.sort_values(['id', 'date']).copy()
+    
+    # Create lagged features for each location
+    for location_id in df['id'].unique():
+        mask = df['id'] == location_id
+        location_data = df[mask].copy()
+        
+        # Create lagged features
+        df.loc[mask, 'lagged_1'] = location_data['pm25'].shift(1)
+        df.loc[mask, 'lagged_2'] = location_data['pm25'].shift(2)
+        df.loc[mask, 'lagged_3'] = location_data['pm25'].shift(3)
+    
+    # Convert to float32
+    for lag in [1, 2, 3]:
+        df[f'lagged_{lag}'] = df[f'lagged_{lag}'].astype('float32')
+    
+    return df
+
+# %%
 def load_air_quality_data(locations: dict) -> pd.DataFrame:
     """Load and process air quality data for all locations."""
     dfs = []
@@ -59,7 +79,18 @@ def load_air_quality_data(locations: dict) -> pd.DataFrame:
         process_air_quality(df, locations[location_id])
         dfs.append(df)
 
-    return pd.concat(dfs, ignore_index=True)
+    combined_df = pd.concat(dfs, ignore_index=True)
+    
+    # Add lagged features
+    print("Adding lagged features...")
+    combined_df = add_lagged_features(combined_df)
+
+    # Drop rows with NaN lagged features
+    print(f"Rows before dropping NaNs: {len(combined_df)}")
+    combined_df = combined_df.dropna(subset=['lagged_1', 'lagged_2', 'lagged_3'])
+    print(f"Rows after dropping NaNs: {len(combined_df)}")
+    
+    return combined_df
 
 
 air_quality_df = load_air_quality_data(locations)
@@ -94,19 +125,19 @@ air_quality_df["longitude"] = air_quality_df["id"].map(
 air_quality_df.info()
 
 # %%
-project = hopsworks.login(engine="python", project="airqual")
+project = hopsworks.login(api_key_value=settings.hopsworks_api_key)
 fs = project.get_feature_store()
 
 # %%
 air_quality_fg = fs.get_or_create_feature_group(
     name="air_quality",
-    description="Air Quality characteristics of each day",
-    version=5,
+    description="Air Quality characteristics of each day with lagged features",
+    version=3,
     primary_key=["id"],
     event_time="date",
 )
 air_quality_fg
-air_quality_df
+
 # %%
 air_quality_fg.insert(air_quality_df)
 
@@ -158,4 +189,3 @@ weather_fg = fs.get_or_create_feature_group(
 )
 weather_fg.insert(weather_df, wait=True)
 # %%
-

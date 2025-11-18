@@ -1,11 +1,10 @@
 # %%
-"""Batch inference pipeline for air quality predictions."""
 import json
 import os
-from datetime import date
-
+from datetime import date, timedelta
 import hopsworks
 import matplotlib.pyplot as plt
+import pandas as pd
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from xgboost import XGBRegressor
 import pandas as pd
@@ -40,6 +39,7 @@ mr = project.get_model_registry()
 # 🔁 Use the latest trained model version here (adjust version if needed)
 retrieved_model = mr.get_model(
     name="air_quality_xgboost_model",
+    version=2,
     version=6,
 )
 
@@ -166,8 +166,10 @@ forecasts_fg = fs.get_or_create_feature_group(
     event_time="date",
 )
 
-forecasts_fg.insert(forecast_data, write_options={"wait_for_job": True})
-print("✓ Predictions saved to Hopsworks")
+    forecasts_fg.insert(forecast_data, write_options={"wait_for_job": True})
+    print("✓ Predictions saved to Hopsworks")
+else:
+    print("⚠ No predictions to save - check if historical data is available")
 
 # %%
 # Plotting (unchanged except that we now use enriched `batch_data`)
@@ -194,6 +196,9 @@ for location_id, location in locations.items():
     plt.xlabel("Date")
     plt.ylabel("Predicted PM2.5 (μg/m³)")
     plt.title(f"Air Quality Forecast - {location['city']}, {location['country']}")
+    plt.axhline(y=25, color='orange', linestyle='--', label='Moderate', alpha=0.7)
+    plt.axhline(y=50, color='red', linestyle='--', label='Unhealthy', alpha=0.7)
+    plt.legend()
     plt.xticks(rotation=45)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -236,8 +241,11 @@ Batch Inference Summary:
 -----------------------
 Forecast date: {today}
 Locations: {len(locations)}
-Total predictions: {len(predictions)}
-Predictions per location: ~{len(predictions) // len(locations)}
+Total predictions: {len(predictions_list)}
+Predictions per location: ~{len(predictions_list) // len(locations) if locations else 0}
 Saved to feature group: air_quality_forecasts v1
+
+Note: Predictions use the 3 most recent historical PM2.5 values as lagged features
+      for all forecast days. These values automatically update as the daily pipeline runs.
 """)
 # %%
