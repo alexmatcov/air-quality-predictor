@@ -2,23 +2,23 @@
 """Batch inference pipeline for air quality predictions."""
 import json
 import os
-from datetime import date, datetime
+from datetime import date
 
 import hopsworks
 import matplotlib.pyplot as plt
-import pandas as pd
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from xgboost import XGBRegressor
 
+# %%
 # %%
 class Settings(BaseSettings):
     """Application settings loaded from .env file."""
     hopsworks_api_key: str
-    aqicn_api_key: str
-
-    class Config:
-        env_file = ".env"
-
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra='ignore'
+        )
 
 settings = Settings()
 
@@ -154,7 +154,7 @@ try:
             )
     
     proj_url = project.get_url()
-    print(f"\n✓ Forecast plots uploaded to Hopsworks")
+    print("\n✓ Forecast plots uploaded to Hopsworks")
     print(f"View at: {proj_url}/settings/fb/path/Resources/airquality")
     
 except Exception as e:
