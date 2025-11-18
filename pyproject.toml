@@ -10,6 +10,7 @@ dependencies = [
     "ipykernel>=7.1.0",
     "matplotlib>=3.10.7",
     "openmeteo-requests>=1.7.4",
+    "optuna>=4.6.0",
     "pandas<2.3.0",
     "plotly>=6.5.0",
     "pyarrow>=21.0.0",

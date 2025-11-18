@@ -1,21 +1,20 @@
 # %%
 import json
-from datetime import date, timedelta
 import hopsworks
 import pandas as pd
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from datetime import date
+from pydantic_settings import BaseSettings
 import util
+from pandas import to_datetime
 
 # %%
 class Settings(BaseSettings):
     """Application settings loaded from .env file."""
     hopsworks_api_key: str
     aqicn_api_key: str
-    
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        extra='ignore'
-    )
+
+    class Config:
+        env_file = ".env"
 
 
 settings = Settings()
@@ -29,41 +28,6 @@ def load_locations(filepath: str = "locations.json") -> dict:
 
 locations = load_locations()
 locations
-
-# %%
-def add_lagged_features(air_quality_df: pd.DataFrame, air_quality_fg) -> pd.DataFrame:
-    """Add lagged PM2.5 features for the previous 1, 2, and 3 days."""
-    today = date.today()
-    
-    # Get last 4 days of data to calculate lags
-    last_4_days = (today - timedelta(days=4)).strftime("%Y-%m-%d")
-    historical_data = air_quality_fg.filter(air_quality_fg.date >= last_4_days).read()
-    
-    # For each row in today's data, find lagged values
-    for idx, row in air_quality_df.iterrows():
-        location_id = row['id']
-        current_date = row['date']
-        
-        # Get historical data for this location
-        location_history = historical_data[historical_data['id'] == location_id].sort_values('date')
-        
-        # Calculate lagged features
-        for lag in [1, 2, 3]:
-            lag_date = pd.to_datetime(current_date) - timedelta(days=lag)
-            lag_data = location_history[pd.to_datetime(location_history['date']) == lag_date]
-            
-            if not lag_data.empty:
-                air_quality_df.loc[idx, f'lagged_{lag}'] = lag_data.iloc[0]['pm25']
-            else:
-                air_quality_df.loc[idx, f'lagged_{lag}'] = None
-    
-    # Convert lagged columns to float32
-    for lag in [1, 2, 3]:
-        if f'lagged_{lag}' in air_quality_df.columns:
-            air_quality_df[f'lagged_{lag}'] = air_quality_df[f'lagged_{lag}'].astype('float32')
-    
-    return air_quality_df
-
 
 # %%
 air_quality_df = pd.DataFrame()
@@ -81,31 +45,119 @@ for location_id, location in locations.items():
 air_quality_df.info()
 
 # %%
-weather_df = util.get_forecast(forecast_days=10, places=locations)
+"""Fetch weather forecast data for all locations 7 days ahead"""
+weather_df = util.get_forecast(forecast_days=7, places=locations)
 weather_df.info()
 
 # %%
+"""Connect to Hopsworks feature store, should work with yours as well"""
 project = hopsworks.login(api_key_value=settings.hopsworks_api_key)
 fs = project.get_feature_store()
 
 # %%
-air_quality_fg = fs.get_feature_group(name="air_quality", version=3)
-weather_fg = fs.get_feature_group(name="weather", version=2)
+"""May need to update version to work with yours. Setting all versions to 11 though so if you do a clean run it should work"""
+air_quality_fg = fs.get_feature_group(name="air_quality", version=11)
+weather_fg = fs.get_feature_group(name="weather", version=11)
+
+#%%
+
+air_quality_df["date"] = to_datetime(air_quality_df["date"]).dt.date
+
+# Read historical air quality from FG
+hist_aq = air_quality_fg.read()[["id", "date", "pm25"]]
+hist_aq["date"] = to_datetime(hist_aq["date"]).dt.date
+
+# Combine historical + today
+combined_aq = pd.concat([hist_aq, air_quality_df], ignore_index=True)
+combined_aq = combined_aq.sort_values(["id", "date"])
+
+# Group by sensor and compute lags/rolling
+grouped_aq = combined_aq.groupby("id", group_keys=False)
+combined_aq["pm25_lag_1"] = grouped_aq["pm25"].shift(1)
+combined_aq["pm25_lag_2"] = grouped_aq["pm25"].shift(2)
+combined_aq["pm25_lag_3"] = grouped_aq["pm25"].shift(3)
+combined_aq["pm25_roll_3"] = (
+    grouped_aq["pm25"]
+    .rolling(3)
+    .mean()
+    .reset_index(level=0, drop=True)
+)
+
+# Keep only today's rows
+today_ts = today
+new_aq = combined_aq[combined_aq["date"] == today_ts].copy()
+
+# Temporal features
+new_aq["date"] = to_datetime(new_aq["date"])
+new_aq["day_of_week"] = new_aq["date"].dt.weekday
+
+# Spatial features
+new_aq["latitude"] = new_aq["id"].map(lambda x: float(locations[x]["latitude"]))
+new_aq["longitude"] = new_aq["id"].map(lambda x: float(locations[x]["longitude"]))
+
+print("Air quality rows to insert today:")
+new_aq.info()
+
+#%%
+
+# Ensure date is datetime for forecast data
+weather_df["date"] = to_datetime(weather_df["date"]).dt.date
+
+# Read historical weather from FG
+hist_weather = weather_fg.read()
+hist_weather["date"] = to_datetime(hist_weather["date"]).dt.date
+
+# Keep only base weather columns
+base_cols = [
+    "id",
+    "date",
+    "temperature_2m_mean",
+    "precipitation_sum",
+    "wind_speed_10m_max",
+    "wind_direction_10m_dominant",
+]
+hist_weather = hist_weather[base_cols]
+
+# Combine historical + new forecast
+combined_weather = pd.concat([hist_weather, weather_df], ignore_index=True)
+combined_weather = combined_weather.sort_values(["id", "date"])
+
+# Group and compute weather lags / rolling means
+grouped_w = combined_weather.groupby("id", group_keys=False)
+
+combined_weather["temperature_2m_mean_lag_1"] = grouped_w["temperature_2m_mean"].shift(1)
+combined_weather["precipitation_sum_lag_1"] = grouped_w["precipitation_sum"].shift(1)
+combined_weather["wind_speed_10m_max_lag_1"] = grouped_w["wind_speed_10m_max"].shift(1)
+combined_weather["wind_direction_10m_dominant_lag_1"] = grouped_w["wind_direction_10m_dominant"].shift(1)
+
+combined_weather["temp_roll_3"] = (
+    grouped_w["temperature_2m_mean"]
+    .rolling(3)
+    .mean()
+    .reset_index(level=0, drop=True)
+)
+combined_weather["wind_roll_3"] = (
+    grouped_w["wind_speed_10m_max"]
+    .rolling(3)
+    .mean()
+    .reset_index(level=0, drop=True)
+)
+
+# Keep only the forecast period (dates from the forecast_df)
+forecast_dates = weather_df["date"].unique()
+new_weather = combined_weather[combined_weather["date"].isin(forecast_dates)].copy()
+
+print("Weather rows to insert (forecast):")
+new_weather.info()
+new_weather["date"] = pd.to_datetime(new_weather["date"]).dt.date
 
 # %%
-# Add lagged features before inserting
-print("Adding lagged features...")
-air_quality_df = add_lagged_features(air_quality_df, air_quality_fg)
-print("✓ Lagged features added")
-air_quality_df.info()
+print(f"Inserting {len(new_aq)} air quality records...")
+air_quality_fg.insert(new_aq)
 
 # %%
-print(f"Inserting {len(air_quality_df)} air quality records...")
-air_quality_fg.insert(air_quality_df)
-
-# %%
-print(f"Inserting {len(weather_df)} weather records...")
-weather_fg.insert(weather_df, wait=True)
+print(f"Inserting {len(new_weather)} weather records...")
+weather_fg.insert(new_weather, wait=True)
 print("✓ Daily feature pipeline completed successfully!")
 
 # %%
