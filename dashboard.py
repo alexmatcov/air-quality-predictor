@@ -29,8 +29,8 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     project = hopsworks.login(api_key_value=settings.hopsworks_api_key)
     fs = project.get_feature_store()
     
-    air_quality_fg = fs.get_feature_group(name="air_quality", version=2)
-    forecasts_fg = fs.get_feature_group(name="air_quality_forecasts", version=1)
+    air_quality_fg = fs.get_feature_group(name="air_quality", version=11)
+    forecasts_fg = fs.get_feature_group(name="air_quality_forecasts", version=11)
     
     # Load last 21 days of historical data
     last_21_days = (date.today() - timedelta(days=21)).strftime("%Y-%m-%d")
@@ -40,6 +40,12 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     
     # Load forecasts (past and future)
     forecast_df = forecasts_fg.read()
+
+    # Keep only the most recent forecast date for each location. Otherwise if we run multiple days we will get duplicates.
+    forecast_df["forecast_date"] = pd.to_datetime(forecast_df["forecast_date"])
+    latest_forecast_date = forecast_df["forecast_date"].max()
+    forecast_df = forecast_df[forecast_df["forecast_date"] == latest_forecast_date]
+
     forecast_df = forecast_df.sort_values(by="date")
     
     return aq_df, forecast_df
