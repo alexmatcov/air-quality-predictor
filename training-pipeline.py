@@ -37,19 +37,22 @@ project = hopsworks.login(api_key_value=settings.hopsworks_api_key)
 fs = project.get_feature_store()
 
 # %%
-air_quality_fg = fs.get_feature_group(name="air_quality", version=2)
+air_quality_fg = fs.get_feature_group(name="air_quality", version=3)
 weather_fg = fs.get_feature_group(name="weather", version=2)
 
 # %%
-selected_features = air_quality_fg.select(["id", "pm25", "date"]).join(
+# Create feature view with lagged features
+selected_features = air_quality_fg.select([
+    "id", "pm25", "date", "lagged_1", "lagged_2", "lagged_3"
+]).join(
     weather_fg.select_all(), on="id"
 )
 
 # %%
 feature_view = fs.get_or_create_feature_view(
     name="air_quality_fv",
-    description="Weather features with air quality as the target",
-    version=1,
+    description="Weather features with air quality and lagged PM2.5 as features",
+    version=2,
     labels=["pm25"],
     query=selected_features,
 )
@@ -193,4 +196,25 @@ MSE: {mse:.4f}
 R²: {r2:.4f}
 Model saved to: {model_dir}
 """)
+# %%
+# Check for outliers and data quality issues
+print("\n=== Data Quality Check ===")
+print("\nPM2.5 Statistics:")
+print(f"Training - Min: {y_train.min().values[0]:.2f}, Max: {y_train.max().values[0]:.2f}, Mean: {y_train.mean().values[0]:.2f}")
+print(f"Test - Min: {y_test.min().values[0]:.2f}, Max: {y_test.max().values[0]:.2f}, Mean: {y_test.mean().values[0]:.2f}")
+
+# Check for extreme values
+extreme_threshold = 200  # PM2.5 > 200 is extremely rare in Sweden
+extreme_train = len(y_train[y_train.iloc[:, 0] > extreme_threshold])
+extreme_test = len(y_test[y_test.iloc[:, 0] > extreme_threshold])
+print(f"\nExtreme values (PM2.5 > {extreme_threshold}):")
+print(f"  Training: {extreme_train}")
+print(f"  Test: {extreme_test}")
+
+# Create a DataFrame for easier analysis
+results_df = pd.DataFrame({
+    'actual': y_test.iloc[:, 0].values,
+    'predicted': y_pred,
+    'error': abs(y_test.iloc[:, 0].values - y_pred)
+})
 # %%
