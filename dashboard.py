@@ -206,8 +206,9 @@ def create_plot(location: dict, df_air_quality: pd.DataFrame, df_forecast: pd.Da
     if not forecast_data.empty:
         # Separate past forecasts (hindcast) from future forecasts
         today = pd.Timestamp(date.today())
-        past_forecasts = forecast_data[forecast_data["date"] < today]
-        future_forecasts = forecast_data[forecast_data["date"] >= today]
+        max_future = today + pd.Timedelta(days=7)
+        past_forecasts = forecast_data[forecast_data["date"] <= today]
+        future_forecasts = forecast_data[(forecast_data["date"] > today) & (forecast_data["date"] <= max_future)]
         
         # Show past predictions (hindcast)
         if not past_forecasts.empty:
