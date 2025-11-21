@@ -40,8 +40,12 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     
     # Load forecasts (past and future)
     forecast_df = forecasts_fg.read()
+    # Keep only the latest prediction for each (id, date) to avoid overlapping lines
+    if "prediction_date" in forecast_df.columns:
+        forecast_df = forecast_df.sort_values(by=["date", "prediction_date"])
+    forecast_df = forecast_df.drop_duplicates(subset=["id", "date"], keep="last")
     forecast_df = forecast_df.sort_values(by="date")
-    
+
     return aq_df, forecast_df
 
 
@@ -276,12 +280,12 @@ def create_plot(location: dict, df_air_quality: pd.DataFrame, df_forecast: pd.Da
 # Main dashboard
 st.set_page_config(page_title="Air Quality Dashboard", page_icon="🌍", layout="wide")
 
-st.title("🌍 Air Quality Prediction Dashboard")
+st.title("🌍 Air Quality Prediction Dashboard for Skåne, Sweden")
 
 # Project introduction
 st.markdown("""
-This dashboard presents a machine learning system for predicting PM2.5 air quality levels across Swedish cities. 
-Using historical weather and air quality data, an XGBoost model forecasts pollution levels up to 10 days in advance. 
+This dashboard presents a machine learning system for predicting PM2.5 air quality levels across Swedish cities in Skåne region. 
+Using historical weather and air quality data, an XGBoost model forecasts pollution for 7 days in advance. 
 The system runs daily automated pipelines to collect fresh data, generate predictions, and monitor model performance 
 through hindcast analysis comparing predictions against actual measurements.
 """)
