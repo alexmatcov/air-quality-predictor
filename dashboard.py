@@ -262,6 +262,7 @@ def create_plot(location: dict, df_air_quality: pd.DataFrame, df_forecast: pd.Da
         title=f"Air Quality in {location['city']}, {location['country']}",
         xaxis_title="Date",
         yaxis_title="PM2.5 (μg/m³)",
+        yaxis_type="log",
         hovermode="x unified",
         height=450,
         showlegend=True,
