@@ -29,7 +29,7 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     project = hopsworks.login(api_key_value=settings.hopsworks_api_key)
     fs = project.get_feature_store()
     
-    air_quality_fg = fs.get_feature_group(name="air_quality", version=2)
+    air_quality_fg = fs.get_feature_group(name="air_quality", version=3)
     forecasts_fg = fs.get_feature_group(name="air_quality_forecasts", version=1)
     
     # Load last 21 days of historical data
